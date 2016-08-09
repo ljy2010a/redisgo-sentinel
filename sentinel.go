@@ -21,49 +21,65 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+// Sentinel maintains a pool of master *redigo.Poll.
+// The application calls the Pool method to get the pool.
+// NOTICE : as the the switch-master signal tick Sentinel will try to reconnect the new master
+//  you should always get the pool from Sentinel , do not keep the pool for   your own
+// Example like redigo
+// The following example shows how to use a Sentinel in application. The
+// application creates a Sentinel at application startup and makes it available to
+// request handlers using a global variable.
 type Sentinel struct {
+	//keep the sentinel addrs , when pub `+sentinel` will change
 	SentinelAddrs []string
 
+	//sentinel mastername
 	MasterName string
 
+	// SentinelDial is an application supplied function for creating and configuring a
+	// connection.
+	//
+	// The connection returned from Dial must not be in a special state
+	// (subscribed to pubsub channel, transaction started, ...).
 	SentinelDial func(addr string) (redis.Conn, error)
 
-	PoolDial func(addr string) (redis.Conn, error)
-
-	lastMasterAddr string
-
+	// A concurrent Map to save the sentinel pool
 	sentinelPools *poolMap
 
+	// This dial is for the master pool like redigo , but as the sentinel model , the master addr will be filled after sentinel get the addr by name
+	//
+	// The connection returned from Dial must not be in a special state
+	// (subscribed to pubsub channel, transaction started, ...).
+	PoolDial func(addr string) (redis.Conn, error)
+
+	// Keep the master *redigo.Pool
 	masterPool *redis.Pool
 
-	stop bool
+	//to save the last addr for master addr
+	lastMasterAddr string
 
-	// SwitchNotify bool
-
+	// A channel to get the new master addr when `switch-master`
 	switchMaster chan string
-
-	// RecoveryTime time.Duration
 }
 
+// Return the sentinel's master addr
 func (s *Sentinel) LastMasterAddr() string {
 	return s.lastMasterAddr
 }
 
-// func (s *Sentinel) SwitchMasterChan() chan string {
-// 	if s.SwitchNotify {
-// 		return s.switchMaster
-// 	}
-// 	return nil
-// }
-
+// Get the master pool from sentinel. The application should run the Load func below
+// NOTICE : When the master ODOWN , you will the a bad conn from the pool
 func (s *Sentinel) Pool() *redis.Pool {
 	return s.masterPool
 }
 
+// Begin to run the Sentinel. Here is the Process below
+// 1. Connect the sentinels , add it to sentinelPools , start sentry() to subscribe the news from sentinel-server
+// 2. Get the master addr from sentinel
+// 3. Start the monitors to keep the sentinel available
 func (s *Sentinel) Load() error {
-	s.switchMaster = make(chan string, 10)
+	s.switchMaster = make(chan string, len(s.SentinelAddrs))
 	s.sentinelPools = newPoolMap()
-	// s.RecoveryTime = 30 * time.Second
 
 	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
 	for _, addr := range s.SentinelAddrs {
@@ -95,13 +111,16 @@ func (s *Sentinel) Load() error {
 // func (s *Sentinel) monitorSentinelAddrs() {
 // }
 
+// Monitor the `switch-master` .
+// When the `switch-master` tick , check the master addr if equal LastMasterAddr
+// to reset masterPool ,
 func (s *Sentinel) monitorSwitchMaster() {
 	for {
 		select {
 		case <-s.switchMaster:
 			newAddr := <-s.switchMaster
 			if s.lastMasterAddr == newAddr {
-				log.Println("lastMasterAddr match the new addr do not need to reconnect")
+				log.Println("the new addr do not need to reconnect")
 				break
 			}
 			s.masterPool.Close()
@@ -121,6 +140,7 @@ func (s *Sentinel) monitorSwitchMaster() {
 	}
 }
 
+// Get the master addr from sentinel conn
 func (s *Sentinel) masterAddr() (string, error) {
 	res, err := s.cmdToSentinels(func(c redis.Conn) (interface{}, error) {
 		return getMasterAddrByName(c, s.MasterName)
@@ -131,6 +151,7 @@ func (s *Sentinel) masterAddr() (string, error) {
 	return res.(string), nil
 }
 
+// New the SentinelPool for sentinel
 func (s *Sentinel) newSentinelPool(addr string) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     3,
@@ -147,6 +168,8 @@ func (s *Sentinel) newSentinelPool(addr string) *redis.Pool {
 	}
 }
 
+// Run the cmd to sentinels muliply until get the result
+// If all the sentinel fail return `no sentinel was useful`
 func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (interface{}, error) {
 	for _, addr := range s.SentinelAddrs {
 		pool := s.sentinelPools.get(addr)
@@ -165,6 +188,7 @@ func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (inte
 	return nil, fmt.Errorf("no sentinel was useful")
 }
 
+// Sentinel sentry for `switch-master`
 func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
 	conn := pool.Get()
 	err := subscribeSwitchMaster(
@@ -172,10 +196,7 @@ func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
 		conn,
 		func(oldAddr string, newAddr string) {
 			log.Printf("master addr has move to : %v from %v \n", newAddr, oldAddr)
-			s.lastMasterAddr = newAddr
-			// if s.SwitchNotify {
 			s.switchMaster <- newAddr
-			// }
 		},
 		func(err error) {
 			log.Println(err)

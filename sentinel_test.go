@@ -69,6 +69,10 @@ func TestSentinel(t *testing.T) {
 	for {
 		select {
 		case <-timeTicker.C:
+			i++
+			if i > 300 {
+				return
+			}
 			pool := sentinel.Pool()
 			if pool != nil {
 				rconn := pool.Get()

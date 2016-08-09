@@ -22,6 +22,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+// SENTINEL get-master-addr-by-name
 func getMasterAddrByName(conn redis.Conn, masterName string) (string, error) {
 	res, err := redis.Strings(conn.Do("SENTINEL", "get-master-addr-by-name", masterName))
 	if err != nil {
@@ -35,6 +36,7 @@ func getMasterAddrByName(conn redis.Conn, masterName string) (string, error) {
 	return masterAddr, nil
 }
 
+// SUBSCRIBE +switch-master
 func subscribeSwitchMaster(
 	masterName string,
 	conn redis.Conn,
