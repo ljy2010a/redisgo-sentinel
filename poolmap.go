@@ -58,3 +58,13 @@ func (p *poolMap) del(addr string) {
 		delete(p.pools, addr)
 	}
 }
+
+func (p *poolMap) keys() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	keys := []string{}
+	for k := range p.pools {
+		keys = append(keys, k)
+	}
+	return keys
+}

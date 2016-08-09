@@ -1,6 +1,6 @@
 redigo-sentinel
 ======
-
+[![GoDoc](https://godoc.org/github.com/ljy2010a/redigo-sentinel?status.svg)](https://godoc.org/github.com/ljy2010a/redigo-sentinel)
 
 redigo-sentinel is a [Go](http://golang.org/) sentinel client for the [Redis](http://redis.io/) database base on [Redigo](https://github.com/garyburd/redigo) refer by [sentinel-clients-doc](http://redis.io/topics/sentinel-clients)
 
@@ -11,13 +11,15 @@ Features
 * Sentinel failover disconnection
 * Connection pools
 * Error reporting
+* Sentinels list automatic refresh
 * Subscribe to Sentinel events to improve responsiveness 
-	- switch-master
+	- +switch-master
+	- -dup-sentinel
+	- +sentinel
 
 Future
 ------
 * Connecting to slaves
-* Sentinels list automatic refresh
 * Subscribe to Sentinel more events to improve responsiveness 
 
 Documentation
@@ -42,7 +44,7 @@ Related Projects
 Example 
 -------
 
-```
+``` gol
     sentinel := &Sentinel{
 		SentinelAddrs: []string{"127.0.0.1:26379", "127.0.0.1:26379"},
 		MasterName:    "mymaster",

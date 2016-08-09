@@ -37,33 +37,81 @@ func getMasterAddrByName(conn redis.Conn, masterName string) (string, error) {
 	return masterAddr, nil
 }
 
+// SENTINEL sentinels
+func getSentinels(conn redis.Conn, masterName string) ([]string, error) {
+	res, err := redis.Values(conn.Do("SENTINEL", "sentinels", masterName))
+	if err != nil {
+		return nil, err
+	}
+	sentinels := make([]string, 0)
+	for _, a := range res {
+		sm, err := redis.StringMap(a, err)
+		if err != nil {
+			return sentinels, err
+		}
+		sentinels = append(sentinels, fmt.Sprintf("%s:%s", sm["ip"], sm["port"]))
+	}
+	return sentinels, nil
+}
+
+const (
+	cmd_switch_master = "+switch-master"
+	cmd_dup_sentinel  = "-dup-sentinel"
+	cmd_sentinel      = "+sentinel"
+)
+
+type sentinelSubEvent struct {
+	SwitchMaster func(oldAddr string, newAddr string)
+	Sentinel     func(sentinelAddr string)
+	Error        func(err error)
+}
+
 // SUBSCRIBE +switch-master
-func subscribeSwitchMaster(
+func subscribeSentinel(
 	masterName string,
 	conn redis.Conn,
-	cbReceive func(oldAddr string, newAddr string),
-	cbError func(err error),
+	event sentinelSubEvent,
 ) error {
 	psc := redis.PubSubConn{conn}
-	psc.Subscribe("+switch-master")
+	psc.Subscribe(cmd_switch_master, cmd_dup_sentinel, cmd_sentinel)
 	for {
 		switch v := psc.Receive().(type) {
-		case redis.Message:
-			log.Printf("%s: message: %s\n", v.Channel, v.Data)
-			parts := strings.Split(string(v.Data), " ")
-			if parts[0] != masterName {
-				log.Printf("sentinel: ignore new %s addr \n ", masterName)
-				continue
-			}
-			oldAddr := net.JoinHostPort(parts[1], parts[2])
-			newAddr := net.JoinHostPort(parts[3], parts[4])
-			cbReceive(oldAddr, newAddr)
 		case redis.Subscription:
 			log.Printf(" %s: %s %d\n", v.Channel, v.Kind, v.Count)
 		case error:
 			log.Printf("Sentinel receive error %v \n", v)
-			cbError(v)
+			event.Error(v)
 			return v
+		case redis.Message:
+			switch v.Channel {
+			case cmd_switch_master:
+				log.Printf("%s: message: %s\n", v.Channel, v.Data)
+				parts := strings.Split(string(v.Data), " ")
+				if parts[0] != masterName {
+					log.Printf("sentinel: ignore new %s addr \n ", masterName)
+					continue
+				}
+				oldAddr := net.JoinHostPort(parts[1], parts[2])
+				newAddr := net.JoinHostPort(parts[3], parts[4])
+				event.SwitchMaster(oldAddr, newAddr)
+			case cmd_dup_sentinel:
+
+			case cmd_sentinel:
+				// back example : sentinel 127.0.0.1:26378 127.0.0.1 26378 @ mymaster 127.0.0.1 6377
+				parts := strings.Split(string(v.Data), " ")
+				if parts[0] != "sentinel" {
+					log.Printf("not +sentinel \n ")
+					continue
+				}
+				sentinelAddr := net.JoinHostPort(parts[2], parts[3])
+				log.Printf("add new sentinel addr : %v \n ", sentinelAddr)
+				if event.Sentinel != nil {
+					event.Sentinel(sentinelAddr)
+				}
+			default:
+				continue
+			}
+
 		}
 	}
 }

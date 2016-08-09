@@ -52,7 +52,7 @@ func TestSentinel(t *testing.T) {
 			return c, nil
 		},
 
-		MasterPool: &redis.Pool{
+		masterPool: &redis.Pool{
 			MaxIdle:     10,
 			MaxActive:   200,
 			Wait:        true,

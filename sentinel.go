@@ -24,11 +24,14 @@ import (
 
 // Sentinel maintains a pool of master *redigo.Poll.
 // The application calls the Pool method to get the pool.
-// NOTICE : as the the switch-master signal tick Sentinel will try to reconnect the new master
-//  you should always get the pool from Sentinel , do not keep the pool for   your own
+// NOTICE : as the the switch-master signal tick Sentinel will try to reconnect
+// the new master
+// you should always get the pool from Sentinel , do not keep the pool for
+// your own
 // Example like redigo
 // The following example shows how to use a Sentinel in application. The
-// application creates a Sentinel at application startup and makes it available to
+// application creates a Sentinel at application startup and makes it available
+// to
 // request handlers using a global variable.
 type Sentinel struct {
 	//keep the sentinel addrs , when pub `+sentinel` will change
@@ -37,7 +40,8 @@ type Sentinel struct {
 	//sentinel mastername
 	MasterName string
 
-	// SentinelDial is an application supplied function for creating and configuring a
+	// SentinelDial is an application supplied function for creating and
+	// configuring a
 	// connection.
 	//
 	// The connection returned from Dial must not be in a special state
@@ -47,7 +51,8 @@ type Sentinel struct {
 	// A concurrent Map to save the sentinel pool
 	sentinelPools *poolMap
 
-	// This dial is for the master pool like redigo , but as the sentinel model , the master addr will be filled after sentinel get the addr by name
+	// This dial is for the master pool like redigo , but as the sentinel model
+	// , the master addr will be filled after sentinel get the addr by name
 	//
 	// The connection returned from Dial must not be in a special state
 	// (subscribed to pubsub channel, transaction started, ...).
@@ -61,6 +66,9 @@ type Sentinel struct {
 
 	// A channel to get the new master addr when `switch-master`
 	switchMaster chan string
+
+	//
+	sentinelAddr chan string
 }
 
 // Return the sentinel's master addr
@@ -74,8 +82,16 @@ func (s *Sentinel) Pool() *redis.Pool {
 	return s.masterPool
 }
 
+// Get the sentinelsAddrs snapshot
+// do not make sure all the addr available
+func (s *Sentinel) SentinelsAddrs() []string {
+	s.SentinelAddrs = s.sentinelPools.keys()
+	return s.SentinelAddrs
+}
+
 // Begin to run the Sentinel. Here is the Process below
-// 1. Connect the sentinels , add it to sentinelPools , start sentry() to subscribe the news from sentinel-server
+// 1. Connect the sentinels , add it to sentinelPools , start sentry() to
+// subscribe the news from sentinel-server
 // 2. Get the master addr from sentinel
 // 3. Start the monitors to keep the sentinel available
 func (s *Sentinel) Load() error {
@@ -90,7 +106,28 @@ func (s *Sentinel) Load() error {
 			go s.sentry(addr, pool)
 		}
 	}
-	var err error
+
+	// search for the other sentinel
+	sentinelAddrs, err := s.sentinelAddrs()
+	if err != nil {
+		return err
+	}
+
+	// connect the left over sentinel
+	for _, addr := range sentinelAddrs {
+		if pool := s.sentinelPools.get(addr); pool != nil {
+			continue
+		}
+		pool := s.newSentinelPool(addr)
+		if pool != nil {
+			s.sentinelPools.set(addr, pool)
+			go s.sentry(addr, pool)
+		}
+	}
+
+	//reset the connected sentinelAddrs
+	s.SentinelAddrs = s.sentinelPools.keys()
+
 	masterAddr, err := s.masterAddr()
 	if err != nil {
 		return err
@@ -104,13 +141,29 @@ func (s *Sentinel) Load() error {
 	}
 
 	go s.monitorSwitchMaster()
-	// go s.monitorSentinelAddrs()
-	// go scan sentinel addrs
+	go s.monitorSentinelAddrs()
 	return err
 }
 
-// func (s *Sentinel) monitorSentinelAddrs() {
-// }
+// Monitor the `+sentinel` .
+func (s *Sentinel) monitorSentinelAddrs() {
+	for {
+		select {
+		case <-s.sentinelAddr:
+			newSentinelAddr := <-s.sentinelAddr
+			log.Printf("+sentinel %v \n", newSentinelAddr)
+			if pool := s.sentinelPools.get(newSentinelAddr); pool != nil {
+				continue
+			}
+			pool := s.newSentinelPool(newSentinelAddr)
+			if pool != nil {
+				s.sentinelPools.set(newSentinelAddr, pool)
+				go s.sentry(newSentinelAddr, pool)
+			}
+			break
+		}
+	}
+}
 
 // Monitor the `switch-master` .
 // When the `switch-master` tick , check the master addr if equal LastMasterAddr
@@ -150,6 +203,17 @@ func (s *Sentinel) masterAddr() (string, error) {
 		return "", err
 	}
 	return res.(string), nil
+}
+
+// Get the sentinels from sentinel conn
+func (s *Sentinel) sentinelAddrs() ([]string, error) {
+	res, err := s.cmdToSentinels(func(c redis.Conn) (interface{}, error) {
+		return getSentinels(c, s.MasterName)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.([]string), nil
 }
 
 // New the SentinelPool for sentinel
@@ -192,17 +256,24 @@ func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (inte
 // Sentinel sentry for `switch-master`
 func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
 	conn := pool.Get()
-	err := subscribeSwitchMaster(
-		s.MasterName,
-		conn,
-		func(oldAddr string, newAddr string) {
+	event := sentinelSubEvent{
+		SwitchMaster: func(oldAddr string, newAddr string) {
 			log.Printf("master addr has move to : %v from %v \n", newAddr, oldAddr)
 			s.switchMaster <- newAddr
 		},
-		func(err error) {
+		Sentinel: func(sentinelAddr string) {
+			s.sentinelAddr <- sentinelAddr
+		},
+		Error: func(err error) {
 			log.Println(err)
+			s.sentinelPools.get(addr).Close()
 			s.sentinelPools.del(addr)
 		},
+	}
+	err := subscribeSentinel(
+		s.MasterName,
+		conn,
+		event,
 	)
 	return err
 }
