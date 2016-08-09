@@ -67,7 +67,7 @@ Example
 			log.Printf("masterpool Available at %v \n", addr)
 			return c, nil
 		},
-		MasterPool: &redis.Pool{
+		masterPool: &redis.Pool{
 			MaxIdle:     10,
 			MaxActive:   200,
 			Wait:        true,

@@ -70,7 +70,7 @@ type sentinelSubEvent struct {
 func subscribeSentinel(
 	masterName string,
 	conn redis.Conn,
-	event sentinelSubEvent,
+	event *sentinelSubEvent,
 ) error {
 	psc := redis.PubSubConn{conn}
 	psc.Subscribe(cmd_switch_master, cmd_dup_sentinel, cmd_sentinel)
@@ -83,9 +83,9 @@ func subscribeSentinel(
 			event.Error(v)
 			return v
 		case redis.Message:
+			log.Printf("%s: message: %s\n", v.Channel, v.Data)
 			switch v.Channel {
 			case cmd_switch_master:
-				log.Printf("%s: message: %s\n", v.Channel, v.Data)
 				parts := strings.Split(string(v.Data), " ")
 				if parts[0] != masterName {
 					log.Printf("sentinel: ignore new %s addr \n ", masterName)
@@ -104,14 +104,10 @@ func subscribeSentinel(
 					continue
 				}
 				sentinelAddr := net.JoinHostPort(parts[2], parts[3])
-				log.Printf("add new sentinel addr : %v \n ", sentinelAddr)
-				if event.Sentinel != nil {
-					event.Sentinel(sentinelAddr)
-				}
+				event.Sentinel(sentinelAddr)
 			default:
 				continue
 			}
-
 		}
 	}
 }

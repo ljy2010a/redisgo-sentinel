@@ -63,12 +63,6 @@ type Sentinel struct {
 
 	//to save the last addr for master addr
 	lastMasterAddr string
-
-	// A channel to get the new master addr when `switch-master`
-	switchMaster chan string
-
-	//
-	sentinelAddr chan string
 }
 
 // Return the sentinel's master addr
@@ -95,7 +89,6 @@ func (s *Sentinel) SentinelsAddrs() []string {
 // 2. Get the master addr from sentinel
 // 3. Start the monitors to keep the sentinel available
 func (s *Sentinel) Load() error {
-	s.switchMaster = make(chan string, len(s.SentinelAddrs))
 	s.sentinelPools = newPoolMap()
 
 	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
@@ -140,58 +133,42 @@ func (s *Sentinel) Load() error {
 		return s.PoolDial(s.lastMasterAddr)
 	}
 
-	go s.monitorSwitchMaster()
-	go s.monitorSentinelAddrs()
 	return err
 }
 
 // Monitor the `+sentinel` .
-func (s *Sentinel) monitorSentinelAddrs() {
-	for {
-		select {
-		case <-s.sentinelAddr:
-			newSentinelAddr := <-s.sentinelAddr
-			log.Printf("+sentinel %v \n", newSentinelAddr)
-			if pool := s.sentinelPools.get(newSentinelAddr); pool != nil {
-				continue
-			}
-			pool := s.newSentinelPool(newSentinelAddr)
-			if pool != nil {
-				s.sentinelPools.set(newSentinelAddr, pool)
-				go s.sentry(newSentinelAddr, pool)
-			}
-			break
-		}
+func (s *Sentinel) monitorSentinelAddrs(addr string) {
+	log.Printf("monitorSentinelAddrs %v \n", addr)
+	if pool := s.sentinelPools.get(addr); pool != nil {
+		return
+	}
+	pool := s.newSentinelPool(addr)
+	if pool != nil {
+		s.sentinelPools.set(addr, pool)
+		go s.sentry(addr, pool)
 	}
 }
 
 // Monitor the `switch-master` .
 // When the `switch-master` tick , check the master addr if equal LastMasterAddr
 // to reset masterPool ,
-func (s *Sentinel) monitorSwitchMaster() {
-	for {
-		select {
-		case <-s.switchMaster:
-			newAddr := <-s.switchMaster
-			if s.lastMasterAddr == newAddr {
-				log.Println("the new addr do not need to reconnect")
-				break
-			}
-			s.masterPool.Close()
-			redisPool := &redis.Pool{
-				MaxIdle:     s.masterPool.MaxIdle,
-				MaxActive:   s.masterPool.MaxActive,
-				Wait:        s.masterPool.Wait,
-				IdleTimeout: s.masterPool.IdleTimeout,
-				Dial: func() (redis.Conn, error) {
-					return s.PoolDial(s.lastMasterAddr)
-				},
-			}
-			s.masterPool = redisPool
-			s.lastMasterAddr = newAddr
-			break
-		}
+func (s *Sentinel) monitorSwitchMaster(oldAddr string, newAddr string) {
+	if s.lastMasterAddr == newAddr {
+		log.Println("the new addr do not need to reconnect")
+		return
 	}
+	s.masterPool.Close()
+	redisPool := &redis.Pool{
+		MaxIdle:     s.masterPool.MaxIdle,
+		MaxActive:   s.masterPool.MaxActive,
+		Wait:        s.masterPool.Wait,
+		IdleTimeout: s.masterPool.IdleTimeout,
+		Dial: func() (redis.Conn, error) {
+			return s.PoolDial(s.lastMasterAddr)
+		},
+	}
+	s.masterPool = redisPool
+	s.lastMasterAddr = newAddr
 }
 
 // Get the master addr from sentinel conn
@@ -256,17 +233,14 @@ func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (inte
 // Sentinel sentry for `switch-master`
 func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
 	conn := pool.Get()
-	event := sentinelSubEvent{
-		SwitchMaster: func(oldAddr string, newAddr string) {
-			log.Printf("master addr has move to : %v from %v \n", newAddr, oldAddr)
-			s.switchMaster <- newAddr
-		},
-		Sentinel: func(sentinelAddr string) {
-			s.sentinelAddr <- sentinelAddr
-		},
+	event := &sentinelSubEvent{
+		SwitchMaster: s.monitorSwitchMaster,
+		Sentinel:     s.monitorSentinelAddrs,
 		Error: func(err error) {
 			log.Println(err)
-			s.sentinelPools.get(addr).Close()
+			if pool := s.sentinelPools.get(addr); pool != nil {
+				pool.Close()
+			}
 			s.sentinelPools.del(addr)
 		},
 	}

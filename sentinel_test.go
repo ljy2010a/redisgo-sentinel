@@ -30,7 +30,7 @@ func init() {
 
 func TestSentinel(t *testing.T) {
 	sentinel := &Sentinel{
-		SentinelAddrs: []string{"127.0.0.1:26379", "127.0.0.1:26379"},
+		SentinelAddrs: []string{"127.0.0.1:26379", "127.0.0.1:26378"},
 		MasterName:    "mymaster",
 		SentinelDial: func(addr string) (redis.Conn, error) {
 			c, err := redis.Dial("tcp", addr)
@@ -72,8 +72,9 @@ func TestSentinel(t *testing.T) {
 		case <-timeTicker.C:
 			i++
 			if i > 300 {
-				return
+				goto Exit
 			}
+			log.Printf("sentinels : %v \n ", sentinel.SentinelsAddrs())
 			pool := sentinel.Pool()
 			if pool != nil {
 				rconn := pool.Get()
@@ -88,4 +89,6 @@ func TestSentinel(t *testing.T) {
 			}
 		}
 	}
+Exit:
+	log.Printf("Exit \n")
 }
