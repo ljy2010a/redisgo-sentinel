@@ -83,6 +83,7 @@ type Sentinel struct {
 	//
 	closed bool
 
+	//
 	wg sync.WaitGroup
 }
 
@@ -91,8 +92,11 @@ func (s *Sentinel) LastMasterAddr() string {
 	return s.lastMasterAddr
 }
 
-// Get the master pool from sentinel. The application should run the Load func below
-// NOTICE : When the master ODOWN , you will the a bad conn from the pool
+// Get the master pool from sentinel.
+// The application should run the Load() func below first
+// NOTICE : When the master ODOWN , you will get a bad conn from the pool
+// you should not keep the pool for your own,please get pool from sentinel
+// always
 func (s *Sentinel) Pool() *redis.Pool {
 	return s.masterPool
 }
@@ -105,7 +109,7 @@ func (s *Sentinel) SentinelsAddrs() []string {
 }
 
 // Synchronize
-func (s *Sentinel) Wrap(f func()) {
+func (s *Sentinel) wrap(f func()) {
 	s.wg.Add(1)
 	func() {
 		if !s.closed {
@@ -181,7 +185,7 @@ func (s *Sentinel) Load() error {
 
 // provide the sentinel addrs , conn and set the map
 func (s *Sentinel) refreshSentinels(addrs []string) {
-	s.Wrap(func() {
+	s.wrap(func() {
 		for _, addr := range addrs {
 			if pool := s.sentinelPools.get(addr); pool != nil {
 				continue
@@ -199,7 +203,7 @@ func (s *Sentinel) refreshSentinels(addrs []string) {
 // When `+sentinel` tick , check the sentinel if not connected
 // to add the sentinel
 func (s *Sentinel) monitorSentinelAddrs(addr string) {
-	s.Wrap(func() {
+	s.wrap(func() {
 		log.Printf("monitorSentinelAddrs %v \n", addr)
 		if pool := s.sentinelPools.get(addr); pool != nil {
 			return
@@ -216,7 +220,7 @@ func (s *Sentinel) monitorSentinelAddrs(addr string) {
 // When `switch-master` tick , check the master addr if equal LastMasterAddr
 // to reset masterPool ,
 func (s *Sentinel) monitorSwitchMaster(oldAddr string, newAddr string) {
-	s.Wrap(func() {
+	s.wrap(func() {
 		if s.lastMasterAddr == newAddr {
 			log.Println("the new addr do not need to reconnect")
 			return
