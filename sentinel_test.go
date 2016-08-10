@@ -26,6 +26,7 @@ import (
 
 // go test -coverprofile=c.out
 // go tool cover -html=c.out -o c.html
+// open c.html
 
 func init() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
