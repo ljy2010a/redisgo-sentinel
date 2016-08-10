@@ -77,9 +77,14 @@ func TestSentinel(t *testing.T) {
 				startSentinel1(t)
 			}
 
-			if i == 120 {
+			if i == 100 {
 				log.Println("================ startMaster ================")
 				startMaster(t)
+			}
+
+			if i == 130 {
+				log.Println("================ closeSlave ================")
+				closeSlave(t)
 			}
 
 		}
