@@ -225,7 +225,7 @@ func closeSlave(t *testing.T) {
 func startCmd(t *testing.T, cmdname, arg string, close chan int,
 ) {
 	c := make(chan int, 1)
-	cmd := exec.Command("xx", cmdname, arg)
+	cmd := exec.Command(cmdname, arg)
 	// cmd.Stdout = os.Stdout
 	go func() {
 		err := cmd.Run()
