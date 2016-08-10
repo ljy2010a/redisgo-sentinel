@@ -38,6 +38,7 @@ func TestSentinel(t *testing.T) {
 	startAll()
 	time.Sleep(time.Second * 3)
 	defer func() {
+		time.Sleep(time.Second * 3)
 		closeAll()
 		return
 	}()
@@ -85,7 +86,7 @@ func TestSentinel(t *testing.T) {
 Exit:
 	sentinel.Close()
 	log.Printf("Exit \n")
-	time.Sleep(time.Second * 3)
+
 }
 
 func SETEX(sentinel *Sentinel, i int) {
@@ -162,6 +163,7 @@ func startAll() {
 }
 
 func startSentinel1() {
+	log.Println("startSentinel1")
 	sentinel1 = make(chan int)
 	go startCmd(
 		"redis-sentinel",
@@ -176,6 +178,7 @@ func closeSentinel1() {
 
 func startSentinel2() {
 	sentinel2 = make(chan int)
+	log.Println("startSentinel2")
 	go startCmd(
 		"redis-sentinel",
 		"test/redis-sentinel-26378",
@@ -189,6 +192,7 @@ func closeSentinel2() {
 
 func startMaster() {
 	master = make(chan int)
+	log.Println("startMaster")
 	go startCmd(
 		"redis-server",
 		"test/redis-master",
@@ -202,6 +206,7 @@ func closeMaster() {
 
 func startSlave() {
 	slave = make(chan int)
+	log.Println("startSlave")
 	go startCmd(
 		"redis-server",
 		"test/redis-slave",
@@ -216,7 +221,7 @@ func closeSlave() {
 func startCmd(cmdname, arg string, close chan int,
 ) {
 	c := make(chan int, 1)
-	cmd := exec.Command("sh", "-c", cmdname, arg)
+	cmd := exec.Command(cmdname, arg)
 	// cmd.Stdout = os.Stdout
 	go func() {
 		err := cmd.Run()
