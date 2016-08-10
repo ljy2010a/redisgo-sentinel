@@ -17,6 +17,7 @@ package sentinel
 import (
 	"fmt"
 	"log"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -64,6 +65,10 @@ type Sentinel struct {
 
 	//to save the last addr for master addr
 	lastMasterAddr string
+
+	stop bool
+
+	wg *sync.WaitGroup
 }
 
 // Return the sentinel's master addr
@@ -84,6 +89,22 @@ func (s *Sentinel) SentinelsAddrs() []string {
 	return s.SentinelAddrs
 }
 
+func (s *Sentinel) Close() {
+	s.stop = true
+	s.wg.Wait()
+	sentinelAddrs := s.sentinelPools.keys()
+	for _, addr := range sentinelAddrs {
+		if pool := s.sentinelPools.get(addr); pool != nil {
+			pool.Close()
+		}
+		s.sentinelPools.del(addr)
+	}
+
+	if s.masterPool != nil {
+		s.masterPool.Close()
+	}
+}
+
 // Begin to run the Sentinel. Here is the Process below
 // 1. Connect the sentinels , add it to sentinelPools , start sentry() to
 // subscribe the news from sentinel-server
@@ -91,7 +112,7 @@ func (s *Sentinel) SentinelsAddrs() []string {
 // 3. Start the monitors to keep the sentinel available
 func (s *Sentinel) Load() error {
 	s.sentinelPools = newPoolMap()
-
+	s.stop = false
 	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
 	for _, addr := range s.SentinelAddrs {
 		pool := s.newSentinelPool(addr)
@@ -122,6 +143,7 @@ func (s *Sentinel) Load() error {
 	//reset the connected sentinelAddrs
 	s.SentinelAddrs = s.sentinelPools.keys()
 
+	// get the master addr form sentinel
 	masterAddr, err := s.masterAddr()
 	if err != nil {
 		return err
@@ -134,11 +156,23 @@ func (s *Sentinel) Load() error {
 		return s.PoolDial(s.lastMasterAddr)
 	}
 
+	// TODO : ADD REFRESH SENTINEL LIST TASK
+	// TODO : ADD ROLE FOR CHECK
+	// TODO : ADD SYNC.COND FOR GET POOL
+	// TODO : ADD SLAVES POOL FOR CONN
+	// TODO : MAKE THE LOG PRETTY
 	return err
 }
 
 // Monitor the `+sentinel` .
+// When `+sentinel` tick , check the sentinel if not connected
+// to add the sentinel
 func (s *Sentinel) monitorSentinelAddrs(addr string) {
+	if s.stop {
+		return
+	}
+	s.wg.Add(1)
+	defer s.wg.Done()
 	log.Printf("monitorSentinelAddrs %v \n", addr)
 	if pool := s.sentinelPools.get(addr); pool != nil {
 		return
@@ -148,12 +182,18 @@ func (s *Sentinel) monitorSentinelAddrs(addr string) {
 		s.sentinelPools.set(addr, pool)
 		go s.sentry(addr, pool)
 	}
+
 }
 
-// Monitor the `switch-master` .
-// When the `switch-master` tick , check the master addr if equal LastMasterAddr
+// Monitor `switch-master` .
+// When `switch-master` tick , check the master addr if equal LastMasterAddr
 // to reset masterPool ,
 func (s *Sentinel) monitorSwitchMaster(oldAddr string, newAddr string) {
+	if s.stop {
+		return
+	}
+	s.wg.Add(1)
+	defer s.wg.Done()
 	if s.lastMasterAddr == newAddr {
 		log.Println("the new addr do not need to reconnect")
 		return
@@ -231,9 +271,9 @@ func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (inte
 	return nil, fmt.Errorf("no sentinel was useful")
 }
 
-// Sentinel sentry for `switch-master`
+// Sentinel sentry for sub events
 func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
-	var failTimes int64 = 0
+	var failTimes int64
 RESTART:
 	conn := pool.Get()
 	event := &sentinelSubEvent{
@@ -253,6 +293,10 @@ RESTART:
 		conn,
 		event,
 	)
+
+	if s.stop {
+		return nil
+	}
 
 	if atomic.LoadInt64(&failTimes) > 3 {
 		if pool := s.sentinelPools.get(addr); pool != nil {

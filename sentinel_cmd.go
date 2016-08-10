@@ -67,7 +67,7 @@ type sentinelSubEvent struct {
 	Error        func(err error)
 }
 
-// SUBSCRIBE +switch-master
+// SUBSCRIBE BY SENTINEL
 func subscribeSentinel(
 	masterName string,
 	conn redis.Conn,
