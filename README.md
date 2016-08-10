@@ -1,6 +1,6 @@
 redigo-sentinel
 ======
-[![GoDoc](https://godoc.org/github.com/ljy2010a/redigo-sentinel?status.svg)](https://godoc.org/github.com/ljy2010a/redigo-sentinel)
+[![GoDoc](https://godoc.org/github.com/ljy2010a/redigo-sentinel?status.svg)](https://godoc.org/github.com/ljy2010a/redisgo-sentinel)
 
 redigo-sentinel is a [Go](http://golang.org/) sentinel client for the [Redis](http://redis.io/) database base on [Redigo](https://github.com/garyburd/redigo) refer by [sentinel-clients-doc](http://redis.io/topics/sentinel-clients)
 
@@ -32,7 +32,7 @@ Installation
 
 Install redigo-sentinel using the "go get" command:
 
-    go get github.com/ljy2010a/redigo-sentinel
+    go get github.com/ljy2010a/redisgo-sentinel
 
 The Go distribution is Redigo's only dependency.
 
