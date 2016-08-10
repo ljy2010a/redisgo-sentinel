@@ -9,6 +9,8 @@ go:
 
 before_install:
   - sudo apt-get -y install redis-server
+  - go get github.com/mattn/goveralls
+  - if ! go get github.com/golang/tools/cmd/cover; then go get golang.org/x/tools/cmd/cover; fi
 
 script:
   - go get -t -v ./...
@@ -16,6 +18,7 @@ script:
   - go vet $(go list ./... | grep -v /vendor/)
   # - go test -v -race ./...
   - go test -v ./...
+  - $HOME/gopath/bin/goveralls -service=travis-ci
 
 notifications:
   email: true
