@@ -61,6 +61,7 @@ const (
 )
 
 type sentinelSubEvent struct {
+	Base         func(msg string)
 	SwitchMaster func(oldAddr string, newAddr string)
 	Sentinel     func(sentinelAddr string)
 	Error        func(err error)
@@ -72,6 +73,11 @@ func subscribeSentinel(
 	conn redis.Conn,
 	event *sentinelSubEvent,
 ) error {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered in %v \n", r)
+		}
+	}()
 	psc := redis.PubSubConn{conn}
 	psc.Subscribe(cmd_switch_master, cmd_dup_sentinel, cmd_sentinel)
 	for {
@@ -84,6 +90,7 @@ func subscribeSentinel(
 			return v
 		case redis.Message:
 			log.Printf("%s: message: %s\n", v.Channel, v.Data)
+			event.Base(string(v.Data))
 			switch v.Channel {
 			case cmd_switch_master:
 				parts := strings.Split(string(v.Data), " ")

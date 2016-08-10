@@ -17,6 +17,7 @@ package sentinel
 import (
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
@@ -232,22 +233,35 @@ func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (inte
 
 // Sentinel sentry for `switch-master`
 func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
+	var failTimes int64 = 0
+RESTART:
 	conn := pool.Get()
 	event := &sentinelSubEvent{
+		Base: func(msg string) {
+			atomic.StoreInt64(&failTimes, 0)
+		},
 		SwitchMaster: s.monitorSwitchMaster,
 		Sentinel:     s.monitorSentinelAddrs,
 		Error: func(err error) {
 			log.Println(err)
-			if pool := s.sentinelPools.get(addr); pool != nil {
-				pool.Close()
-			}
-			s.sentinelPools.del(addr)
+			atomic.AddInt64(&failTimes, 1)
 		},
 	}
+
 	err := subscribeSentinel(
 		s.MasterName,
 		conn,
 		event,
 	)
+
+	if atomic.LoadInt64(&failTimes) > 3 {
+		if pool := s.sentinelPools.get(addr); pool != nil {
+			pool.Close()
+		}
+		s.sentinelPools.del(addr)
+	} else {
+		goto RESTART
+	}
+
 	return err
 }
