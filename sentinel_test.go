@@ -15,6 +15,7 @@
 package sentinel
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os/exec"
@@ -226,11 +227,13 @@ func startCmd(t *testing.T, cmdname, arg string, close chan int,
 ) {
 	c := make(chan int, 1)
 	cmd := exec.Command(cmdname, arg)
-	// cmd.Stdout = os.Stdout
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
 	go func() {
 		err := cmd.Run()
 		if err != nil {
-			t.Fatalf("err : %v \n", err)
+			t.Fatalf("out : %v \n", out.String())
 		}
 		c <- 1
 	}()
