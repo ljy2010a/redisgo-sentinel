@@ -63,10 +63,25 @@ type Sentinel struct {
 	// Keep the master *redigo.Pool
 	masterPool *redis.Pool
 
+	// SlavesDial is an application supplied function for creating and
+	// configuring a
+	// connection.
+	//
+	// The connection returned from Dial must not be in a special state
+	// (subscribed to pubsub channel, transaction started, ...).
+	SlavesDial func(addr string) (redis.Conn, error)
+
+	// A concurrent Map to save the sentinel pool
+	slavesPools *poolMap
+
 	//to save the last addr for master addr
 	lastMasterAddr string
 
-	stop bool
+	//
+	enableSlaves bool
+
+	//
+	closed bool
 
 	wg sync.WaitGroup
 }
@@ -93,7 +108,7 @@ func (s *Sentinel) SentinelsAddrs() []string {
 func (s *Sentinel) Wrap(f func()) {
 	s.wg.Add(1)
 	func() {
-		if !s.stop {
+		if !s.closed {
 			f()
 		}
 		s.wg.Done()
@@ -101,7 +116,7 @@ func (s *Sentinel) Wrap(f func()) {
 }
 
 func (s *Sentinel) Close() {
-	s.stop = true
+	s.closed = true
 	s.wg.Wait()
 	sentinelAddrs := s.sentinelPools.keys()
 	for _, addr := range sentinelAddrs {
@@ -123,11 +138,12 @@ func (s *Sentinel) Close() {
 // 3. Start the monitors to keep the sentinel available
 func (s *Sentinel) Load() error {
 	s.sentinelPools = newPoolMap()
-	s.stop = false
+	s.slavesPools = newPoolMap()
+	s.closed = false
 	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
 
 	// connect the sentinel user offer
-	s.fleshSentinels(s.SentinelAddrs)
+	s.freshSentinels(s.SentinelAddrs)
 
 	log.Printf("sentinel has to conn %v \n", s.sentinelPools.keys())
 
@@ -138,7 +154,7 @@ func (s *Sentinel) Load() error {
 	}
 
 	// connect the left over sentinel
-	s.fleshSentinels(sentinelAddrs)
+	s.freshSentinels(sentinelAddrs)
 
 	//reset the connected sentinelAddrs
 	s.SentinelAddrs = s.sentinelPools.keys()
@@ -163,7 +179,7 @@ func (s *Sentinel) Load() error {
 }
 
 // provide the sentinel addrs , conn and set the map
-func (s *Sentinel) fleshSentinels(addrs []string) {
+func (s *Sentinel) freshSentinels(addrs []string) {
 	s.Wrap(func() {
 		for _, addr := range addrs {
 			if pool := s.sentinelPools.get(addr); pool != nil {
@@ -225,14 +241,14 @@ func (s *Sentinel) taskFreshSentinel() {
 	for {
 		select {
 		case <-timeTicker.C:
-			if s.stop {
+			if s.closed {
 				goto Exit
 			}
 			addrs, err := s.sentinelAddrs()
 			if err != nil {
 				goto Exit
 			}
-			s.fleshSentinels(addrs)
+			s.freshSentinels(addrs)
 		}
 	}
 Exit:
@@ -341,7 +357,7 @@ RESTART:
 		event,
 	)
 
-	if s.stop {
+	if s.closed {
 		return nil
 	}
 
