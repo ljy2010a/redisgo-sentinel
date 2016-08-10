@@ -11,13 +11,13 @@ Features
 * Sentinel failover disconnection
 * Connection pools
 * Error reporting
+* Sentinels list automatic refresh
 * Subscribe to Sentinel events to improve responsiveness 
 	- +switch-master
 	- +sentinel
 
 Future
 ------
-* Sentinels list automatic refresh
 * Connecting to slaves
 * Subscribe to Sentinel more events to improve responsiveness 
 

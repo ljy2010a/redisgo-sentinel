@@ -115,6 +115,7 @@ func (s *Sentinel) Wrap(f func()) {
 	}()
 }
 
+// Close all the pool
 func (s *Sentinel) Close() {
 	s.closed = true
 	s.wg.Wait()
@@ -143,7 +144,7 @@ func (s *Sentinel) Load() error {
 	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
 
 	// connect the sentinel user offer
-	s.freshSentinels(s.SentinelAddrs)
+	s.refreshSentinels(s.SentinelAddrs)
 
 	log.Printf("sentinel has to conn %v \n", s.sentinelPools.keys())
 
@@ -154,7 +155,7 @@ func (s *Sentinel) Load() error {
 	}
 
 	// connect the left over sentinel
-	s.freshSentinels(sentinelAddrs)
+	s.refreshSentinels(sentinelAddrs)
 
 	//reset the connected sentinelAddrs
 	s.SentinelAddrs = s.sentinelPools.keys()
@@ -172,14 +173,14 @@ func (s *Sentinel) Load() error {
 		return s.PoolDial(s.lastMasterAddr)
 	}
 
-	go s.taskFreshSentinel()
+	go s.taskRefreshSentinel()
 	// TODO : ADD SLAVES POOL FOR CONN
 	// TODO : MAKE THE LOG PRETTY
 	return err
 }
 
 // provide the sentinel addrs , conn and set the map
-func (s *Sentinel) freshSentinels(addrs []string) {
+func (s *Sentinel) refreshSentinels(addrs []string) {
 	s.Wrap(func() {
 		for _, addr := range addrs {
 			if pool := s.sentinelPools.get(addr); pool != nil {
@@ -235,7 +236,8 @@ func (s *Sentinel) monitorSwitchMaster(oldAddr string, newAddr string) {
 	})
 }
 
-func (s *Sentinel) taskFreshSentinel() {
+// task for refresh sentinels
+func (s *Sentinel) taskRefreshSentinel() {
 	timeTicker := time.NewTicker(time.Second * 30)
 	defer timeTicker.Stop()
 	for {
@@ -248,11 +250,11 @@ func (s *Sentinel) taskFreshSentinel() {
 			if err != nil {
 				goto Exit
 			}
-			s.freshSentinels(addrs)
+			s.refreshSentinels(addrs)
 		}
 	}
 Exit:
-	log.Printf("Exit TaskFreshSentinel\n")
+	log.Printf("Exit taskRefreshSentinel\n")
 }
 
 // Get the master addr from sentinel conn
