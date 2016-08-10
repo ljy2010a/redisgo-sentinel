@@ -35,11 +35,11 @@ func init() {
 
 func TestSentinel(t *testing.T) {
 
-	startAll()
+	startAll(t)
 	time.Sleep(time.Second * 3)
 	defer func() {
 		time.Sleep(time.Second * 3)
-		closeAll()
+		closeAll(t)
 		return
 	}()
 
@@ -63,22 +63,22 @@ func TestSentinel(t *testing.T) {
 
 			if i == 30 {
 				log.Println("================ closeMaster ================")
-				closeMaster()
+				closeMaster(t)
 			}
 
 			if i == 70 {
 				log.Println("================ closeSentinel1 ================")
-				closeSentinel1()
+				closeSentinel1(t)
 			}
 
 			if i == 90 {
 				log.Println("================ startSentinel1 ================")
-				startSentinel1()
+				startSentinel1(t)
 			}
 
 			if i == 120 {
 				log.Println("================ startMaster ================")
-				startMaster()
+				startMaster(t)
 			}
 
 		}
@@ -148,91 +148,94 @@ var sentinel2 = make(chan int)
 var master = make(chan int)
 var slave = make(chan int)
 
-func closeAll() {
-	closeSentinel1()
-	closeSentinel2()
-	closeMaster()
-	closeSlave()
+func closeAll(t *testing.T) {
+	closeSentinel1(t)
+	closeSentinel2(t)
+	closeMaster(t)
+	closeSlave(t)
 }
 
-func startAll() {
-	startMaster()
-	startSlave()
-	startSentinel1()
-	startSentinel2()
+func startAll(t *testing.T) {
+	startMaster(t)
+	startSlave(t)
+	startSentinel1(t)
+	startSentinel2(t)
 }
 
-func startSentinel1() {
+func startSentinel1(t *testing.T) {
 	log.Println("startSentinel1")
 	sentinel1 = make(chan int)
 	go startCmd(
+		t,
 		"redis-sentinel",
 		"test/redis-sentinel-26379",
 		sentinel1,
 	)
 }
 
-func closeSentinel1() {
+func closeSentinel1(t *testing.T) {
 	sentinel1 <- 1
 }
 
-func startSentinel2() {
+func startSentinel2(t *testing.T) {
 	sentinel2 = make(chan int)
 	log.Println("startSentinel2")
 	go startCmd(
+		t,
 		"redis-sentinel",
 		"test/redis-sentinel-26378",
 		sentinel2,
 	)
 }
 
-func closeSentinel2() {
+func closeSentinel2(t *testing.T) {
 	sentinel2 <- 1
 }
 
-func startMaster() {
+func startMaster(t *testing.T) {
 	master = make(chan int)
 	log.Println("startMaster")
 	go startCmd(
+		t,
 		"redis-server",
 		"test/redis-master",
 		master,
 	)
 }
 
-func closeMaster() {
+func closeMaster(t *testing.T) {
 	master <- 1
 }
 
-func startSlave() {
+func startSlave(t *testing.T) {
 	slave = make(chan int)
 	log.Println("startSlave")
 	go startCmd(
+		t,
 		"redis-server",
 		"test/redis-slave",
 		slave,
 	)
 }
 
-func closeSlave() {
+func closeSlave(t *testing.T) {
 	slave <- 1
 }
 
-func startCmd(cmdname, arg string, close chan int,
+func startCmd(t *testing.T, cmdname, arg string, close chan int,
 ) {
 	c := make(chan int, 1)
-	cmd := exec.Command(cmdname, arg)
+	cmd := exec.Command("xx", cmdname, arg)
 	// cmd.Stdout = os.Stdout
 	go func() {
 		err := cmd.Run()
-		if err == nil {
-			log.Fatalf("err : %v \n", err)
+		if err != nil {
+			t.Fatalf("err : %v \n", err)
 		}
 		c <- 1
 	}()
 	select {
 	case <-c:
-		return
 	case <-close:
 		cmd.Process.Kill()
 	}
