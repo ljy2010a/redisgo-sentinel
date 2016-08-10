@@ -61,7 +61,7 @@ type Sentinel struct {
 	PoolDial func(addr string) (redis.Conn, error)
 
 	// Keep the master *redigo.Pool
-	masterPool *redis.Pool
+	MasterPool *redis.Pool
 
 	// SlavesDial is an application supplied function for creating and
 	// configuring a
@@ -98,7 +98,7 @@ func (s *Sentinel) LastMasterAddr() string {
 // you should not keep the pool for your own,please get pool from sentinel
 // always
 func (s *Sentinel) Pool() *redis.Pool {
-	return s.masterPool
+	return s.MasterPool
 }
 
 // Get the sentinelsAddrs snapshot
@@ -131,8 +131,8 @@ func (s *Sentinel) Close() {
 		s.sentinelPools.del(addr)
 	}
 
-	if s.masterPool != nil {
-		s.masterPool.Close()
+	if s.MasterPool != nil {
+		s.MasterPool.Close()
 	}
 }
 
@@ -173,7 +173,7 @@ func (s *Sentinel) Load() error {
 	s.lastMasterAddr = masterAddr
 	log.Printf("sentinel load master  %v \n", s.lastMasterAddr)
 
-	s.masterPool.Dial = func() (redis.Conn, error) {
+	s.MasterPool.Dial = func() (redis.Conn, error) {
 		return s.PoolDial(s.lastMasterAddr)
 	}
 
@@ -225,17 +225,17 @@ func (s *Sentinel) monitorSwitchMaster(oldAddr string, newAddr string) {
 			log.Println("the new addr do not need to reconnect")
 			return
 		}
-		s.masterPool.Close()
+		s.MasterPool.Close()
 		redisPool := &redis.Pool{
-			MaxIdle:     s.masterPool.MaxIdle,
-			MaxActive:   s.masterPool.MaxActive,
-			Wait:        s.masterPool.Wait,
-			IdleTimeout: s.masterPool.IdleTimeout,
+			MaxIdle:     s.MasterPool.MaxIdle,
+			MaxActive:   s.MasterPool.MaxActive,
+			Wait:        s.MasterPool.Wait,
+			IdleTimeout: s.MasterPool.IdleTimeout,
 			Dial: func() (redis.Conn, error) {
-				return s.PoolDial(s.lastMasterAddr)
+				return s.PoolDial(newAddr)
 			},
 		}
-		s.masterPool = redisPool
+		s.MasterPool = redisPool
 		s.lastMasterAddr = newAddr
 	})
 }

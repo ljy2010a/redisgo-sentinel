@@ -25,7 +25,7 @@ import (
 
 func init() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
-	log.SetPrefix(fmt.Sprintf("[Sentinel]"))
+	log.SetPrefix(fmt.Sprintf("[Sentinel] "))
 }
 
 func TestSentinel(t *testing.T) {
@@ -52,7 +52,7 @@ func TestSentinel(t *testing.T) {
 			return c, nil
 		},
 
-		masterPool: &redis.Pool{
+		MasterPool: &redis.Pool{
 			MaxIdle:     10,
 			MaxActive:   200,
 			Wait:        true,
