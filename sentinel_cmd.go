@@ -54,6 +54,23 @@ func getSentinels(conn redis.Conn, masterName string) ([]string, error) {
 	return sentinels, nil
 }
 
+// SENTINEL slaves
+func getSlaves(conn redis.Conn, masterName string) ([]string, error) {
+	res, err := redis.Values(conn.Do("SENTINEL", "slaves", masterName))
+	if err != nil {
+		return nil, err
+	}
+	slaves := []string{}
+	for _, a := range res {
+		sm, err := redis.StringMap(a, err)
+		if err != nil {
+			return slaves, err
+		}
+		slaves = append(slaves, net.JoinHostPort(sm["ip"], sm["port"]))
+	}
+	return slaves, nil
+}
+
 const (
 	cmd_switch_master = "+switch-master"
 	cmd_dup_sentinel  = "-dup-sentinel"

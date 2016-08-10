@@ -90,5 +90,6 @@ func TestSentinel(t *testing.T) {
 		}
 	}
 Exit:
+	sentinel.Close()
 	log.Printf("Exit \n")
 }

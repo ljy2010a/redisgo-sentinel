@@ -241,9 +241,11 @@ Exit:
 
 // Get the master addr from sentinel conn
 func (s *Sentinel) masterAddr() (string, error) {
-	res, err := s.cmdToSentinels(func(c redis.Conn) (interface{}, error) {
-		return getMasterAddrByName(c, s.MasterName)
-	})
+	res, err := s.cmdToSentinels(
+		func(c redis.Conn) (interface{}, error) {
+			return getMasterAddrByName(c, s.MasterName)
+		},
+	)
 	if err != nil {
 		return "", err
 	}
@@ -252,9 +254,24 @@ func (s *Sentinel) masterAddr() (string, error) {
 
 // Get the sentinels from sentinel conn
 func (s *Sentinel) sentinelAddrs() ([]string, error) {
-	res, err := s.cmdToSentinels(func(c redis.Conn) (interface{}, error) {
-		return getSentinels(c, s.MasterName)
-	})
+	res, err := s.cmdToSentinels(
+		func(c redis.Conn) (interface{}, error) {
+			return getSentinels(c, s.MasterName)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return res.([]string), nil
+}
+
+// Get the slaves from sentinel conn
+func (s *Sentinel) slavesAddrs() ([]string, error) {
+	res, err := s.cmdToSentinels(
+		func(c redis.Conn) (interface{}, error) {
+			return getSlaves(c, s.MasterName)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +297,9 @@ func (s *Sentinel) newSentinelPool(addr string) *redis.Pool {
 
 // Run the cmd to sentinels muliply until get the result
 // If all the sentinel fail return `no sentinel was useful`
-func (s *Sentinel) cmdToSentinels(f func(redis.Conn) (interface{}, error)) (interface{}, error) {
+func (s *Sentinel) cmdToSentinels(
+	f func(redis.Conn) (interface{}, error),
+) (interface{}, error) {
 	addrs := s.sentinelPools.keys()
 	for _, addr := range addrs {
 		pool := s.sentinelPools.get(addr)
