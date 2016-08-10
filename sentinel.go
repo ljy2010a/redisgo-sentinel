@@ -122,7 +122,9 @@ func (s *Sentinel) wrap(f func()) {
 // Close all the pool
 func (s *Sentinel) Close() {
 	s.closed = true
+	log.Println("close sentinel begin wait all proc stop")
 	s.wg.Wait()
+	log.Println("all proc stop")
 	sentinelAddrs := s.sentinelPools.keys()
 	for _, addr := range sentinelAddrs {
 		if pool := s.sentinelPools.get(addr); pool != nil {
@@ -134,6 +136,7 @@ func (s *Sentinel) Close() {
 	if s.MasterPool != nil {
 		s.MasterPool.Close()
 	}
+	log.Println("close sentinel done ")
 }
 
 // Begin to run the Sentinel. Here is the Process below
