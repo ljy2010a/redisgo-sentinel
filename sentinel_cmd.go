@@ -95,7 +95,9 @@ func subscribeSentinel(
 			log.Printf("Recovered in %v \n", r)
 		}
 	}()
-	psc := redis.PubSubConn{conn}
+	psc := redis.PubSubConn{
+		Conn: conn,
+	}
 	psc.Subscribe(cmd_switch_master, cmd_dup_sentinel, cmd_sentinel)
 	for {
 		switch v := psc.Receive().(type) {

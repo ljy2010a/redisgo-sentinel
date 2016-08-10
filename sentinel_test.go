@@ -39,9 +39,8 @@ func TestSentinel(t *testing.T) {
 	startAll(t)
 	time.Sleep(time.Second * 3)
 	defer func() {
-		time.Sleep(time.Second * 3)
 		closeAll(t)
-		return
+		time.Sleep(time.Second * 3)
 	}()
 
 	sentinel := newDefaultSentinel()
