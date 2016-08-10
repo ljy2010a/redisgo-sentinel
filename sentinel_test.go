@@ -36,10 +36,10 @@ func init() {
 
 func TestSentinel(t *testing.T) {
 
-	startAll(t)
+	startAll()
 	time.Sleep(time.Second * 3)
 	defer func() {
-		closeAll(t)
+		closeAll()
 	}()
 
 	sentinel := newDefaultSentinel()
@@ -152,7 +152,7 @@ var sentinel2 *serverCmd
 var master *serverCmd
 var slave *serverCmd
 
-func closeAll(t *testing.T) {
+func closeAll() {
 	sentinel1.close()
 	time.Sleep(time.Second * 3)
 	sentinel2.close()
@@ -162,11 +162,11 @@ func closeAll(t *testing.T) {
 	slave.close()
 }
 
-func startAll(t *testing.T) {
-	sentinel1 = newServerCmd(t, "redis-sentinel", "test/redis-sentinel-26379")
-	sentinel2 = newServerCmd(t, "redis-sentinel", "test/redis-sentinel-26378")
-	master = newServerCmd(t, "redis-server", "test/redis-master")
-	slave = newServerCmd(t, "redis-server", "test/redis-slave")
+func startAll() {
+	sentinel1 = newServerCmd("redis-sentinel", "test/redis-sentinel-26379")
+	sentinel2 = newServerCmd("redis-sentinel", "test/redis-sentinel-26378")
+	master = newServerCmd("redis-server", "test/redis-master")
+	slave = newServerCmd("redis-server", "test/redis-slave")
 
 	go sentinel1.startCmd()
 	go sentinel2.startCmd()
@@ -181,10 +181,9 @@ type serverCmd struct {
 	t      *testing.T
 }
 
-func newServerCmd(t *testing.T, cmd, arg string) *serverCmd {
+func newServerCmd(cmd, arg string) *serverCmd {
 	serverCmd := &serverCmd{
 		cclose: make(chan int, 1),
-		t:      t,
 		cmd:    cmd,
 		arg:    arg,
 	}
@@ -199,9 +198,9 @@ func (s *serverCmd) startCmd() {
 	cmd.Stderr = &out
 	go func() {
 		err := cmd.Run()
-		s.t.Logf("ProcessState : %v \n", cmd.ProcessState.Success())
+		log.Printf("ProcessState : %v \n", cmd.ProcessState.Success())
 		if err != nil {
-			s.t.Logf("cmd out : %v \n", out.String())
+			log.Printf("cmd out : %v \n", out.String())
 		}
 		c <- 1
 	}()
