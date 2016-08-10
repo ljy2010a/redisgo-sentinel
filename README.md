@@ -43,9 +43,9 @@ Related Projects
 Example 
 -------
 
-``` gol
-    sentinel := &Sentinel{
-		SentinelAddrs: []string{"127.0.0.1:26379", "127.0.0.1:26379"},
+``` go
+	sentinel := &Sentinel{
+		SentinelAddrs: []string{"127.0.0.1:26379", "127.0.0.1:26378"},
 		MasterName:    "mymaster",
 		SentinelDial: func(addr string) (redis.Conn, error) {
 			c, err := redis.Dial("tcp", addr)
@@ -66,6 +66,7 @@ Example
 			log.Printf("masterpool Available at %v \n", addr)
 			return c, nil
 		},
+
 		masterPool: &redis.Pool{
 			MaxIdle:     10,
 			MaxActive:   200,
@@ -78,19 +79,36 @@ Example
 	if err != nil {
 		log.Panicf("%v\n", err)
 	}
-
-    pool := sentinel.Pool()
-	if pool != nil {
-		rconn := pool.Get()
-		_, err := rconn.Do(
-			"SETEX",
-			fmt.Sprintf("test:%d", i),
-			time.Second.Seconds()*3600,
-			1,
-			)
-		rconn.Close()
-		log.Printf("setex error :  %v \n", err)
+	timeTicker := time.NewTicker(time.Second)
+	defer timeTicker.Stop()
+	i := 0
+	for {
+		select {
+		case <-timeTicker.C:
+			i++
+			if i > 300 {
+				goto Exit
+			}
+			log.Printf("sentinels : %v \n", sentinel.SentinelsAddrs())
+			pool := sentinel.Pool()
+			if pool != nil {
+				rconn := pool.Get()
+				_, err := rconn.Do(
+					"SETEX",
+					fmt.Sprintf("test:%d", i),
+					time.Second.Seconds()*3600,
+					i,
+				)
+				rconn.Close()
+				if err != nil {
+					log.Printf("setex error :  %v\n", err)
+				}
+			}
+		}
 	}
+Exit:
+	sentinel.Close()
+	log.Printf("Exit \n")
 ```
 
 License

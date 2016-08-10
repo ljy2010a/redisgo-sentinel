@@ -85,7 +85,9 @@ func TestSentinel(t *testing.T) {
 					i,
 				)
 				rconn.Close()
-				log.Printf("setex error :  %v\n", err)
+				if err != nil {
+					log.Printf("setex error :  %v\n", err)
+				}
 			}
 		}
 	}
