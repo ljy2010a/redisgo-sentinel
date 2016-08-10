@@ -74,7 +74,7 @@ func TestSentinel(t *testing.T) {
 			if i > 300 {
 				goto Exit
 			}
-			log.Printf("sentinels : %v \n ", sentinel.SentinelsAddrs())
+			log.Printf("sentinels : %v \n", sentinel.SentinelsAddrs())
 			pool := sentinel.Pool()
 			if pool != nil {
 				rconn := pool.Get()
@@ -85,7 +85,7 @@ func TestSentinel(t *testing.T) {
 					i,
 				)
 				rconn.Close()
-				log.Printf("setex error :  %v \n", err)
+				log.Printf("setex error :  %v\n", err)
 			}
 		}
 	}

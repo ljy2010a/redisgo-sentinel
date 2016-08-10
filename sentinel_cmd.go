@@ -43,13 +43,13 @@ func getSentinels(conn redis.Conn, masterName string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	sentinels := make([]string, 0)
+	sentinels := []string{}
 	for _, a := range res {
 		sm, err := redis.StringMap(a, err)
 		if err != nil {
 			return sentinels, err
 		}
-		sentinels = append(sentinels, fmt.Sprintf("%s:%s", sm["ip"], sm["port"]))
+		sentinels = append(sentinels, net.JoinHostPort(sm["ip"], sm["port"]))
 	}
 	return sentinels, nil
 }
