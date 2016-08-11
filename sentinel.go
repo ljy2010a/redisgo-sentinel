@@ -17,6 +17,7 @@ package sentinel
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"github.com/garyburd/redigo/redis"
 )
@@ -212,8 +213,22 @@ RESTART:
 		return nil
 	}
 	conn := pool.Get()
-	err := s.subscribeSentinel(conn)
-
+	// notify := make(chan bool)
+	// if atomic.LoadInt64(&failTimes) > 0 {
+	// 	time.AfterFunc(
+	// 		time.Duration(atomic.LoadInt64(&failTimes))*5*time.Second,
+	// 		func() {
+	// 			notify <- false
+	// 		})
+	// } else {
+	// 	notify <- true
+	// }
+	// <-notify
+	_, err := conn.Do("PING")
+	if err != nil {
+		atomic.AddInt64(&failTimes, 1)
+	}
+	err = s.subscribeSentinel(conn)
 	if atomic.LoadInt64(&failTimes) > 3 {
 		if pool := s.sentinelPools.get(addr); pool != nil {
 			pool.Close()
@@ -222,7 +237,5 @@ RESTART:
 	} else {
 		goto RESTART
 	}
-
 	return err
 }
-

@@ -23,6 +23,15 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+// ROLE
+func getRole(c redis.Conn) string {
+	ress, err := redis.Strings(c.Do("ROLE"))
+	if err != nil && len(ress) > 1 {
+		return ""
+	}
+	return ress[0]
+}
+
 // SENTINEL get-master-addr-by-name
 func getMasterAddrByName(conn redis.Conn, masterName string) (string, error) {
 	res, err := redis.Strings(conn.Do("SENTINEL", "get-master-addr-by-name", masterName))

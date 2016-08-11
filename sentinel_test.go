@@ -125,9 +125,7 @@ func newDefaultSentinel() *Sentinel {
 			log.Printf("sentinel Available %v \n", addr)
 			return c, nil
 		},
-
 		PoolDial: func(addr string) (redis.Conn, error) {
-			log.Printf("masterpool connect to : %v ", addr)
 			c, err := redis.Dial("tcp", addr)
 			if err != nil {
 				log.Printf("masterpool not Available %v \n", addr)
@@ -136,13 +134,40 @@ func newDefaultSentinel() *Sentinel {
 			log.Printf("masterpool Available at %v \n", addr)
 			return c, nil
 		},
-
 		MasterPool: &redis.Pool{
 			MaxIdle:     10,
 			MaxActive:   200,
 			Wait:        true,
 			IdleTimeout: 60 * time.Second,
+			TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				if getRole(c) != "master" {
+					return fmt.Errorf("Role is not master")
+				}
+				return nil
+			},
 		},
+		// EnableSlaves: true,
+		// SlavesPoolTe: &redis.Pool{
+		// 	MaxIdle:     10,
+		// 	MaxActive:   200,
+		// 	Wait:        true,
+		// 	IdleTimeout: 60 * time.Second,
+		// 	TestOnBorrow: func(c redis.Conn, t time.Time) error {
+		// 		if getRole(c) != "slaves" {
+		// 			return fmt.Errorf("Role is not slaves")
+		// 		}
+		// 		return nil
+		// 	},
+		// },
+		// SlavesDial: func(addr string) (redis.Conn, error) {
+		// 	c, err := redis.Dial("tcp", addr)
+		// 	if err != nil {
+		// 		log.Printf("slavespool not Available %v \n", addr)
+		// 		return nil, err
+		// 	}
+		// 	log.Printf("slavespool Available at %v \n", addr)
+		// 	return c, nil
+		// },
 	}
 	return sentinel
 }
@@ -200,7 +225,7 @@ func (s *serverCmd) startCmd() {
 		err := cmd.Run()
 		log.Printf("ProcessState : %v \n", cmd.ProcessState.Success())
 		if err != nil {
-			log.Printf("cmd out : %v \n", out.String())
+			// log.Printf("cmd out : %v \n", out.String())
 		}
 		c <- 1
 	}()
