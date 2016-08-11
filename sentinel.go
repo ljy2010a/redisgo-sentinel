@@ -87,7 +87,7 @@ type Sentinel struct {
 	//
 	eventSrv *eventServer
 	//
-	closed bool
+	closed int64
 
 	//
 	wg sync.WaitGroup
@@ -118,7 +118,7 @@ func (s *Sentinel) SentinelsAddrs() []string {
 func (s *Sentinel) wrap(f func()) {
 	s.wg.Add(1)
 	func() {
-		if !s.closed {
+		if atomic.LoadInt64(&s.closed) == 0 {
 			f()
 		}
 		s.wg.Done()
@@ -127,7 +127,8 @@ func (s *Sentinel) wrap(f func()) {
 
 // Close all the pool
 func (s *Sentinel) Close() {
-	s.closed = true
+	// s.closed = true
+	atomic.StoreInt64(&s.closed, 1)
 	log.Println("close sentinel begin wait all proc stop")
 	s.wg.Wait()
 	log.Println("all proc stop")
@@ -154,8 +155,10 @@ func (s *Sentinel) Close() {
 func (s *Sentinel) Load() error {
 	s.sentinelPools = newPoolMap()
 	s.eventSrv = newEventServer()
+	s.eventSrv.Add(cmd_switch_master, s.switchMaster)
+	s.eventSrv.Add(cmd_sentinel, s.addSentinel)
 
-	s.closed = false
+	// s.closed = false
 	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
 
 	// connect the sentinel user offer
@@ -188,7 +191,7 @@ func (s *Sentinel) Load() error {
 		return s.PoolDial(s.lastMasterAddr)
 	}
 
-	go s.taskRefreshSentinel()
+	// go s.taskRefreshSentinel()
 
 	if s.EnableSlaves {
 		s.slavesPools = newPoolMap()
@@ -200,8 +203,6 @@ func (s *Sentinel) Load() error {
 		go s.taskRefreshSlaves()
 	}
 
-	s.eventSrv.Add(cmd_switch_master, s.switchMaster)
-	s.eventSrv.Add(cmd_sentinel, s.addSentinel)
 	return err
 }
 
@@ -209,7 +210,7 @@ func (s *Sentinel) Load() error {
 func (s *Sentinel) sentry(addr string, pool *redis.Pool) error {
 	var failTimes int64
 RESTART:
-	if s.closed {
+	if atomic.LoadInt64(&s.closed) != 0 {
 		return nil
 	}
 	conn := pool.Get()
@@ -224,11 +225,10 @@ RESTART:
 	// 	notify <- true
 	// }
 	// <-notify
-	_, err := conn.Do("PING")
+	err := s.subscribeSentinel(conn)
 	if err != nil {
 		atomic.AddInt64(&failTimes, 1)
 	}
-	err = s.subscribeSentinel(conn)
 	if atomic.LoadInt64(&failTimes) > 3 {
 		if pool := s.sentinelPools.get(addr); pool != nil {
 			pool.Close()

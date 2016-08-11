@@ -42,6 +42,7 @@ func (s *Sentinel) addSentinel(newSentinel InstanceDetail) {
 // to reset masterPool ,
 func (s *Sentinel) switchMaster(newMaster InstanceDetail) {
 	s.wrap(func() {
+		log.Printf(" switchMaster %v \n", newMaster.Addr)
 		if s.lastMasterAddr == newMaster.Addr {
 			log.Println("the new addr do not need to reconnect")
 			return

@@ -26,7 +26,7 @@ import (
 // ROLE
 func getRole(c redis.Conn) string {
 	ress, err := redis.Strings(c.Do("ROLE"))
-	if err != nil && len(ress) > 1 {
+	if err != nil && len(ress) == 0 {
 		return ""
 	}
 	return ress[0]

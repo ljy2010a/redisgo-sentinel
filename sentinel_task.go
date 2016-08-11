@@ -17,6 +17,7 @@ package sentinel
 import (
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
@@ -64,7 +65,7 @@ func (s *Sentinel) taskRefreshSlaves() {
 	for {
 		select {
 		case <-timeTicker.C:
-			if s.closed {
+			if atomic.LoadInt64(&s.closed) != 0 {
 				goto Exit
 			}
 			addrs, err := s.slavesAddrs()
@@ -114,7 +115,7 @@ func (s *Sentinel) taskRefreshSentinel() {
 	for {
 		select {
 		case <-timeTicker.C:
-			if s.closed {
+			if atomic.LoadInt64(&s.closed) != 0 {
 				goto Exit
 			}
 			addrs, err := s.sentinelAddrs()

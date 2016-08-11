@@ -32,8 +32,8 @@ type eventHandler struct {
 func (e *eventHandler) Serve() {
 	for {
 		select {
-		case <-e.Ch:
-			e.HandlerFunc(<-e.Ch)
+		case instance := <-e.Ch:
+			e.HandlerFunc(instance)
 		case <-e.close:
 			return
 		}

@@ -25,7 +25,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// go test -coverprofile=c.out
+// go test -v -race -coverprofile=c.out
 // go tool cover -html=c.out -o c.html
 // open c.html
 
@@ -47,6 +47,10 @@ func TestSentinel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n", err)
 	}
+
+	sentinel.Pool()
+	sentinel.LastMasterAddr()
+
 	timeTicker := time.NewTicker(time.Second)
 	defer timeTicker.Stop()
 	i := -1
@@ -58,7 +62,7 @@ func TestSentinel(t *testing.T) {
 				goto Exit
 			}
 			log.Printf("sentinels : %v \n", sentinel.SentinelsAddrs())
-			SETEX(sentinel, i)
+			// SETEX(sentinel, i)
 
 			if i == 30 {
 				log.Println("================ closeMaster ================")
@@ -146,28 +150,28 @@ func newDefaultSentinel() *Sentinel {
 				return nil
 			},
 		},
-		// EnableSlaves: true,
-		// SlavesPoolTe: &redis.Pool{
-		// 	MaxIdle:     10,
-		// 	MaxActive:   200,
-		// 	Wait:        true,
-		// 	IdleTimeout: 60 * time.Second,
-		// 	TestOnBorrow: func(c redis.Conn, t time.Time) error {
-		// 		if getRole(c) != "slaves" {
-		// 			return fmt.Errorf("Role is not slaves")
-		// 		}
-		// 		return nil
-		// 	},
-		// },
-		// SlavesDial: func(addr string) (redis.Conn, error) {
-		// 	c, err := redis.Dial("tcp", addr)
-		// 	if err != nil {
-		// 		log.Printf("slavespool not Available %v \n", addr)
-		// 		return nil, err
-		// 	}
-		// 	log.Printf("slavespool Available at %v \n", addr)
-		// 	return c, nil
-		// },
+		EnableSlaves: true,
+		SlavesPoolTe: &redis.Pool{
+			MaxIdle:     10,
+			MaxActive:   200,
+			Wait:        true,
+			IdleTimeout: 60 * time.Second,
+			TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				if getRole(c) != "slaves" {
+					return fmt.Errorf("Role is not slaves")
+				}
+				return nil
+			},
+		},
+		SlavesDial: func(addr string) (redis.Conn, error) {
+			c, err := redis.Dial("tcp", addr)
+			if err != nil {
+				log.Printf("slavespool not Available %v \n", addr)
+				return nil, err
+			}
+			log.Printf("slavespool Available at %v \n", addr)
+			return c, nil
+		},
 	}
 	return sentinel
 }
@@ -188,10 +192,11 @@ func closeAll() {
 }
 
 func startAll() {
-	sentinel1 = newServerCmd("redis-sentinel", "test/redis-sentinel-26379")
-	sentinel2 = newServerCmd("redis-sentinel", "test/redis-sentinel-26378")
-	master = newServerCmd("redis-server", "test/redis-master")
-	slave = newServerCmd("redis-server", "test/redis-slave")
+
+	sentinel1 = newServerCmd("redis-sentinel", "test/redis-sentinel-26379", "redis-sentinel \\*:26379")
+	sentinel2 = newServerCmd("redis-sentinel", "test/redis-sentinel-26378", "redis-sentinel \\*:26378")
+	master = newServerCmd("redis-server", "test/redis-master", "redis-server 127.0.0.1:6378")
+	slave = newServerCmd("redis-server", "test/redis-slave", "redis-server 127.0.0.1:6377")
 
 	go sentinel1.startCmd()
 	go sentinel2.startCmd()
@@ -203,40 +208,45 @@ type serverCmd struct {
 	cclose chan int
 	cmd    string
 	arg    string
+	kill   string
 	t      *testing.T
 }
 
-func newServerCmd(cmd, arg string) *serverCmd {
+func newServerCmd(cmd, arg, kill string) *serverCmd {
 	serverCmd := &serverCmd{
 		cclose: make(chan int, 1),
 		cmd:    cmd,
 		arg:    arg,
+		kill:   kill,
 	}
 	return serverCmd
 }
 
 func (s *serverCmd) startCmd() {
-	c := make(chan int, 1)
 	cmd := exec.Command(s.cmd, s.arg)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	go func() {
-		err := cmd.Run()
-		log.Printf("ProcessState : %v \n", cmd.ProcessState.Success())
-		if err != nil {
-			// log.Printf("cmd out : %v \n", out.String())
-		}
-		c <- 1
-	}()
-	select {
-	case <-c:
-		return
-	case <-s.cclose:
-		cmd.Process.Kill()
+	err := cmd.Start()
+	cmd.Wait()
+	log.Printf("kill ProcessState : %v : cmd is %v \n", cmd.ProcessState.Success, cmd.Args)
+	if err != nil {
+		// log.Printf("cmd out : %v \n", out.String())
 	}
+
 }
 
 func (s *serverCmd) close() {
-	s.cclose <- 1
+	// cmd.Process.Kill()
+
+	cmdstr := fmt.Sprintf("ps -ef | grep '%s' | awk '{print $2}' | xargs kill -9 ", s.kill)
+	cmd := exec.Command("bash", "-c", cmdstr)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	log.Printf("kill ProcessState : %v : cmd is %v \n", cmd.ProcessState.Success, cmd.Args)
+	if err != nil {
+		// log.Printf("cmd out : %v \n", out.String())
+	}
 }
