@@ -25,11 +25,20 @@ import (
 
 // ROLE
 func getRole(c redis.Conn) string {
-	ress, err := redis.Strings(c.Do("ROLE"))
-	if err != nil && len(ress) == 0 {
+	res, err := c.Do("ROLE")
+	if err != nil {
+		log.Println(err)
 		return ""
 	}
-	return ress[0]
+	rres, ok := res.([]interface{})
+	if ok {
+		if str, err := redis.String(rres[0], nil); err != nil {
+			log.Println(err)
+		} else {
+			return str
+		}
+	}
+	return ""
 }
 
 // SENTINEL get-master-addr-by-name

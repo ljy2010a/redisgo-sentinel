@@ -191,7 +191,7 @@ func (s *Sentinel) Load() error {
 		return s.PoolDial(s.lastMasterAddr)
 	}
 
-	// go s.taskRefreshSentinel()
+	go s.taskRefreshSentinel()
 
 	if s.EnableSlaves {
 		s.slavesPools = newPoolMap()
