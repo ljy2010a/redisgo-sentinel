@@ -208,7 +208,6 @@ func (s *serverCmd) startCmd() {
 	case <-c:
 		return
 	case <-s.cclose:
-		// cmd.Process.Signal(syscall.SIGTERM)
 		cmd.Process.Kill()
 	}
 }

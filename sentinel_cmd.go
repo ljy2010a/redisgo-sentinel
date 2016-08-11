@@ -71,25 +71,78 @@ func getSlaves(conn redis.Conn, masterName string) ([]string, error) {
 	return slaves, nil
 }
 
+// Get the master addr from sentinel conn
+func (s *Sentinel) masterAddr() (string, error) {
+	res, err := s.cmdToSentinels(
+		func(c redis.Conn) (interface{}, error) {
+			return getMasterAddrByName(c, s.MasterName)
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	return res.(string), nil
+}
+
+// Get the slaves from sentinel conn
+func (s *Sentinel) slavesAddrs() ([]string, error) {
+	res, err := s.cmdToSentinels(
+		func(c redis.Conn) (interface{}, error) {
+			return getSlaves(c, s.MasterName)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return res.([]string), nil
+}
+
+// Get the sentinels from sentinel conn
+func (s *Sentinel) sentinelAddrs() ([]string, error) {
+	res, err := s.cmdToSentinels(
+		func(c redis.Conn) (interface{}, error) {
+			return getSentinels(c, s.MasterName)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return res.([]string), nil
+}
+
+// Run the cmd to sentinels muliply until get the result
+// If all the sentinel fail return `no sentinel was useful`
+func (s *Sentinel) cmdToSentinels(
+	f func(redis.Conn) (interface{}, error),
+) (interface{}, error) {
+	addrs := s.sentinelPools.keys()
+	for _, addr := range addrs {
+		pool := s.sentinelPools.get(addr)
+		if pool == nil {
+			continue
+		}
+		conn := pool.Get()
+		reply, err := f(conn)
+		conn.Close()
+		if err != nil {
+			log.Printf("canot run cmd by sentinel %v \n", addr)
+			continue
+		}
+		return reply, nil
+	}
+	return nil, fmt.Errorf("no sentinel was useful")
+}
+
 const (
 	cmd_switch_master = "+switch-master"
 	cmd_dup_sentinel  = "-dup-sentinel"
 	cmd_sentinel      = "+sentinel"
+	cmd_add_o_down    = "+odown"
+	cmd_min_o_down    = "+odown"
+	cmd_reboot        = "+reboot"
 )
 
-type sentinelSubEvent struct {
-	Base         func(msg string)
-	SwitchMaster func(oldAddr string, newAddr string)
-	Sentinel     func(sentinelAddr string)
-	Error        func(err error)
-}
-
-// SUBSCRIBE BY SENTINEL
-func subscribeSentinel(
-	masterName string,
-	conn redis.Conn,
-	event *sentinelSubEvent,
-) error {
+func (s *Sentinel) subscribeSentinel(conn redis.Conn) error {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Recovered in %v \n", r)
@@ -98,42 +151,50 @@ func subscribeSentinel(
 	psc := redis.PubSubConn{
 		Conn: conn,
 	}
-	psc.Subscribe(cmd_switch_master, cmd_dup_sentinel, cmd_sentinel)
+	psc.Subscribe(
+		cmd_switch_master,
+		cmd_sentinel,
+		cmd_add_o_down,
+		cmd_min_o_down,
+		cmd_reboot,
+	)
 	for {
 		switch v := psc.Receive().(type) {
 		case redis.Subscription:
 			log.Printf(" %s: %s %d\n", v.Channel, v.Kind, v.Count)
 		case error:
 			log.Printf("Sentinel receive error %v \n", v)
-			event.Error(v)
 			return v
 		case redis.Message:
 			log.Printf("%s: message: %s\n", v.Channel, v.Data)
-			event.Base(string(v.Data))
-			switch v.Channel {
-			case cmd_switch_master:
-				parts := strings.Split(string(v.Data), " ")
-				if parts[0] != masterName {
-					log.Printf("sentinel: ignore new %s addr \n ", masterName)
-					continue
-				}
-				oldAddr := net.JoinHostPort(parts[1], parts[2])
-				newAddr := net.JoinHostPort(parts[3], parts[4])
-				event.SwitchMaster(oldAddr, newAddr)
-			case cmd_dup_sentinel:
-
-			case cmd_sentinel:
-				// back example : sentinel 127.0.0.1:26378 127.0.0.1 26378 @ mymaster 127.0.0.1 6377
-				parts := strings.Split(string(v.Data), " ")
-				if parts[0] != "sentinel" {
-					log.Printf("not +sentinel \n ")
-					continue
-				}
-				sentinelAddr := net.JoinHostPort(parts[2], parts[3])
-				event.Sentinel(sentinelAddr)
-			default:
-				continue
-			}
+			s.analysisMessage(v.Channel, v.Data)
 		}
+	}
+}
+
+func (s *Sentinel) analysisMessage(channel string, data []byte) {
+	switch channel {
+	case cmd_switch_master:
+		parts := strings.Split(string(data), " ")
+		// oldAddr := net.JoinHostPort(parts[1], parts[2])
+		newAddr := net.JoinHostPort(parts[3], parts[4])
+		instance := InstanceDetail{
+			Addr: newAddr,
+		}
+		s.eventSrv.Push(channel, instance)
+	case cmd_sentinel:
+		parts := strings.Split(string(data), " ")
+		if parts[0] != "sentinel" {
+			log.Printf("not +sentinel \n ")
+			return
+		}
+		sentinelAddr := net.JoinHostPort(parts[2], parts[3])
+		instance := InstanceDetail{
+			Addr: sentinelAddr,
+		}
+		s.eventSrv.Push(channel, instance)
+	case cmd_add_o_down:
+	default:
+		return
 	}
 }
