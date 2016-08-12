@@ -1,8 +1,8 @@
 redigo-sentinel
 ======
-[![Build Status](https://travis-ci.org/ljy2010a/redigo-sentinel.svg?branch=master)](https://travis-ci.org/ljy2010a/redigo-sentinel)
+[![Build Status](https://travis-ci.org/ljy2010a/redisgo-sentinel.svg?branch=master)](https://travis-ci.org/ljy2010a/redisgo-sentinel)
 [![Coverage Status](https://coveralls.io/repos/github/ljy2010a/redisgo-sentinel/badge.svg?branch=master)](https://coveralls.io/github/ljy2010a/redisgo-sentinel?branch=master)
-[![GoDoc](https://godoc.org/github.com/ljy2010a/redigo-sentinel?status.svg)](https://godoc.org/github.com/ljy2010a/redisgo-sentinel)
+[![GoDoc](https://godoc.org/github.com/ljy2010a/redisgo-sentinel?status.svg)](https://godoc.org/github.com/ljy2010a/redisgo-sentinel)
 
 redigo-sentinel is a [Go](http://golang.org/) sentinel client for the [Redis](http://redis.io/) database base on [Redigo](https://github.com/garyburd/redigo) refer by [sentinel-clients-doc](http://redis.io/topics/sentinel-clients)
 
