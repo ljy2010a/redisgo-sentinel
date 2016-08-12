@@ -229,7 +229,7 @@ func (s *serverCmd) startCmd() {
 	cmd.Stderr = &out
 	err := cmd.Start()
 	cmd.Wait()
-	log.Printf("kill ProcessState : %v : cmd is %v \n", cmd.ProcessState.Success, cmd.Args)
+	log.Printf("kill ProcessState : %v : cmd is %v \n", cmd.ProcessState.Success(), cmd.Args)
 	if err != nil {
 		// log.Printf("cmd out : %v \n", out.String())
 	}
@@ -245,7 +245,7 @@ func (s *serverCmd) close() {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	err := cmd.Run()
-	log.Printf("kill ProcessState : %v : cmd is %v \n", cmd.ProcessState.Success, cmd.Args)
+	log.Printf("kill ProcessState : %v : cmd is %v \n", cmd.ProcessState.Success(), cmd.Args)
 	if err != nil {
 		// log.Printf("cmd out : %v \n", out.String())
 	}
