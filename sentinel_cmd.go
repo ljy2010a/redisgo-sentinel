@@ -16,7 +16,6 @@ package sentinel
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strings"
 
@@ -27,13 +26,13 @@ import (
 func getRole(c redis.Conn) string {
 	res, err := c.Do("ROLE")
 	if err != nil {
-		log.Println(err)
+		logger.Error(err)
 		return ""
 	}
 	rres, ok := res.([]interface{})
 	if ok {
 		if str, err := redis.String(rres[0], nil); err != nil {
-			log.Println(err)
+			logger.Error(err)
 		} else {
 			return str
 		}
@@ -51,7 +50,7 @@ func getMasterAddrByName(conn redis.Conn, masterName string) (string, error) {
 		return "", fmt.Errorf("master-addr not right")
 	}
 	masterAddr := net.JoinHostPort(res[0], res[1])
-	log.Printf("get-master-addr-by-name , masterName : %v , addr : %v \n", masterName, masterAddr)
+	logger.Debugf("get-master-addr-by-name , masterName : %v , addr : %v ", masterName, masterAddr)
 	return masterAddr, nil
 }
 
@@ -143,7 +142,7 @@ func (s *Sentinel) cmdToSentinels(
 		reply, err := f(conn)
 		conn.Close()
 		if err != nil {
-			log.Printf("canot run cmd by sentinel %v \n", addr)
+			logger.Errorf("canot run cmd by sentinel %v ", addr)
 			continue
 		}
 		return reply, nil
@@ -163,7 +162,7 @@ const (
 func (s *Sentinel) subscribeSentinel(conn redis.Conn) error {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered in %v \n", r)
+			logger.Errorf("Recovered in %v ", r)
 		}
 	}()
 	psc := redis.PubSubConn{
@@ -179,12 +178,12 @@ func (s *Sentinel) subscribeSentinel(conn redis.Conn) error {
 	for {
 		switch v := psc.Receive().(type) {
 		case redis.Subscription:
-			log.Printf(" %s: %s %d\n", v.Channel, v.Kind, v.Count)
+			logger.Debugf(" %s: %s %d ", v.Channel, v.Kind, v.Count)
 		case error:
-			log.Printf("Sentinel receive error %v \n", v)
+			logger.Errorf("Sentinel receive error %v", v)
 			return v
 		case redis.Message:
-			log.Printf("%s: message: %s\n", v.Channel, v.Data)
+			logger.Debugf("%s: message: %s ", v.Channel, v.Data)
 			s.analysisMessage(v.Channel, v.Data)
 		}
 	}
@@ -203,7 +202,7 @@ func (s *Sentinel) analysisMessage(channel string, data []byte) {
 	case cmd_sentinel:
 		parts := strings.Split(string(data), " ")
 		if parts[0] != "sentinel" {
-			log.Printf("not +sentinel \n ")
+			logger.Error("not +sentinel")
 			return
 		}
 		sentinelAddr := net.JoinHostPort(parts[2], parts[3])

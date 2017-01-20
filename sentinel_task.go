@@ -16,7 +16,6 @@ package sentinel
 
 import (
 	"fmt"
-	"log"
 	"sync/atomic"
 	"time"
 
@@ -76,7 +75,7 @@ func (s *Sentinel) taskRefreshSlaves() {
 		}
 	}
 Exit:
-	log.Printf("Exit taskRefreshSlaves\n")
+	logger.Debug("Exit taskRefreshSlaves")
 }
 
 // New the SentinelPool for sentinel
@@ -126,5 +125,5 @@ func (s *Sentinel) taskRefreshSentinel() {
 		}
 	}
 Exit:
-	log.Printf("Exit taskRefreshSentinel\n")
+	logger.Debug("Exit taskRefreshSentinel\n")
 }

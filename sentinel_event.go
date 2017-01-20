@@ -14,18 +14,14 @@
 
 package sentinel
 
-import (
-	"log"
-
-	"github.com/garyburd/redigo/redis"
-)
+import "github.com/garyburd/redigo/redis"
 
 // Monitor the `+sentinel` .
 // When `+sentinel` tick , check the sentinel if not connected
 // to add the sentinel
 func (s *Sentinel) addSentinel(newSentinel InstanceDetail) {
 	s.wrap(func() {
-		log.Printf("monitorSentinelAddrs %v \n", newSentinel.Addr)
+		logger.Debugf("monitorSentinelAddrs %v ", newSentinel.Addr)
 		if pool := s.sentinelPools.get(newSentinel.Addr); pool != nil {
 			return
 		}
@@ -42,9 +38,9 @@ func (s *Sentinel) addSentinel(newSentinel InstanceDetail) {
 // to reset masterPool ,
 func (s *Sentinel) switchMaster(newMaster InstanceDetail) {
 	s.wrap(func() {
-		log.Printf(" switchMaster %v \n", newMaster.Addr)
+		logger.Debugf("switchMaster %v ", newMaster.Addr)
 		if s.lastMasterAddr == newMaster.Addr {
-			log.Println("the new addr do not need to reconnect")
+			logger.Debug("the new addr do not need to reconnect")
 			return
 		}
 		s.MasterPool.Close()

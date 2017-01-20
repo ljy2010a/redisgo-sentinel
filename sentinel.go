@@ -15,7 +15,6 @@
 package sentinel
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
 
@@ -129,9 +128,9 @@ func (s *Sentinel) wrap(f func()) {
 func (s *Sentinel) Close() {
 	// s.closed = true
 	atomic.StoreInt64(&s.closed, 1)
-	log.Println("close sentinel begin wait all proc stop")
+	logger.Debug("close sentinel begin wait all proc stop")
 	s.wg.Wait()
-	log.Println("all proc stop")
+	logger.Debug("all proc stop")
 	s.eventSrv.Close()
 	sentinelAddrs := s.sentinelPools.keys()
 	for _, addr := range sentinelAddrs {
@@ -144,7 +143,7 @@ func (s *Sentinel) Close() {
 	if s.MasterPool != nil {
 		s.MasterPool.Close()
 	}
-	log.Println("close sentinel done ")
+	logger.Debug("close sentinel done ")
 }
 
 // Begin to run the Sentinel. Here is the Process below
@@ -159,12 +158,12 @@ func (s *Sentinel) Load() error {
 	s.eventSrv.Add(cmd_sentinel, s.addSentinel)
 
 	// s.closed = false
-	log.Printf("sentinel begin to conn %v \n", s.SentinelAddrs)
+	logger.Debugf("sentinel begin to conn %v \n", s.SentinelAddrs)
 
 	// connect the sentinel user offer
 	s.refreshSentinels(s.SentinelAddrs)
 
-	log.Printf("sentinel has to conn %v \n", s.sentinelPools.keys())
+	logger.Debugf("sentinel has to conn %v \n", s.sentinelPools.keys())
 
 	// search for the other sentinel
 	sentinelAddrs, err := s.sentinelAddrs()
@@ -185,7 +184,7 @@ func (s *Sentinel) Load() error {
 	}
 
 	s.lastMasterAddr = masterAddr
-	log.Printf("sentinel load master  %v \n", s.lastMasterAddr)
+	logger.Debugf("sentinel load master  %v ", s.lastMasterAddr)
 
 	s.MasterPool.Dial = func() (redis.Conn, error) {
 		return s.PoolDial(s.lastMasterAddr)
